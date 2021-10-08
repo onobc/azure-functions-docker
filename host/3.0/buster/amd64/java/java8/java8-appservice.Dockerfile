@@ -1,6 +1,5 @@
 # Build the runtime from source
 ARG HOST_VERSION=3.3.1
-ARG JAVA_VERSION=8u252
 FROM mcr.microsoft.com/dotnet/sdk:5.0 AS runtime-image
 ARG HOST_VERSION
 
@@ -16,8 +15,14 @@ RUN BUILD_NUMBER=$(echo ${HOST_VERSION} | cut -d'.' -f 3) && \
 
 RUN EXTENSION_BUNDLE_VERSION=1.8.1 && \
     EXTENSION_BUNDLE_FILENAME=Microsoft.Azure.Functions.ExtensionBundle.1.8.1_linux-x64.zip && \
+    JAVA_VERSION=8u302b08 && \
+    JDK_NAME=jdk8u302-b08 && \
     apt-get update && \
-    apt-get install -y gnupg wget unzip && \
+    apt-get install -y gnupg wget unzip tar && \
+    wget https://github.com/adoptium/temurin8-binaries/releases/download/$JDK_NAME/OpenJDK8U-jdk_x64_linux_hotspot_${JAVA_VERSION}.tar.gz && \
+    mkdir -p /usr/lib/jvm && \
+    tar xvzf OpenJDK8U-jdk_x64_linux_hotspot_${JAVA_VERSION}.tar.gz -C /usr/lib/jvm &&\
+    rm -f OpenJDK8U-jdk_x64_linux_hotspot_${JAVA_VERSION}.tar.gz && \
     wget https://functionscdn.azureedge.net/public/ExtensionBundles/Microsoft.Azure.Functions.ExtensionBundle/$EXTENSION_BUNDLE_VERSION/$EXTENSION_BUNDLE_FILENAME && \
     mkdir -p /FuncExtensionBundles/Microsoft.Azure.Functions.ExtensionBundle/$EXTENSION_BUNDLE_VERSION && \
     unzip /$EXTENSION_BUNDLE_FILENAME -d /FuncExtensionBundles/Microsoft.Azure.Functions.ExtensionBundle/$EXTENSION_BUNDLE_VERSION && \
@@ -36,7 +41,6 @@ RUN EXTENSION_BUNDLE_VERSION=1.8.1 && \
     rm -f /$EXTENSION_BUNDLE_FILENAME_V3 &&\
     find /FuncExtensionBundles/ -type f -exec chmod 644 {} \;
 
-FROM mcr.microsoft.com/java/jre-headless:${JAVA_VERSION}-zulu-debian10-with-tools as jre
 FROM mcr.microsoft.com/dotnet/core/runtime-deps:3.1
 ARG HOST_VERSION
 
@@ -50,13 +54,13 @@ ENV AzureWebJobsScriptRoot=/home/site/wwwroot \
 
 COPY --from=runtime-image [ "/azure-functions-host", "/azure-functions-host" ]
 COPY --from=runtime-image [ "/workers/java", "/azure-functions-host/workers/java" ]
-COPY --from=jre [ "/usr/lib/jvm/zre-hl-8-azure-amd64", "/usr/lib/jvm/zre-8-azure-amd64" ]
+COPY --from=runtime-image [ "/usr/lib/jvm/jdk8u302-b08", "/usr/lib/jvm/Adoptium-Eclipse-Temurin-OpenJDK-8u302"]
 
 COPY sshd_config /etc/ssh/
 COPY start.sh /azure-functions-host/
 COPY --from=runtime-image [ "/FuncExtensionBundles", "/FuncExtensionBundles" ]
 
-ENV JAVA_HOME /usr/lib/jvm/zre-8-azure-amd64
+ENV JAVA_HOME /usr/lib/jvm/Adoptium-Eclipse-Temurin-OpenJDK-8u302
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends openssh-server dialog && \

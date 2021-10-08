@@ -1,6 +1,5 @@
 # Build the runtime from source
 ARG HOST_VERSION=4.0.0-preview.5.16714
-ARG JAVA_VERSION=11u7
 FROM mcr.microsoft.com/dotnet/sdk:6.0.100-rc.2 AS runtime-image
 ARG HOST_VERSION
 
@@ -22,8 +21,13 @@ RUN BUILD_NUMBER=$(echo ${HOST_VERSION} | cut -d'.' -f 5) && \
 
 RUN EXTENSION_BUNDLE_VERSION=1.8.1 && \
     EXTENSION_BUNDLE_FILENAME=Microsoft.Azure.Functions.ExtensionBundle.1.8.1_linux-x64.zip && \
+    JAVA_VERSION=11.0.12.7.1 && \
     apt-get update && \
-    apt-get install -y gnupg wget unzip && \
+    apt-get install -y gnupg wget unzip tar && \
+    wget https://aka.ms/download-jdk/microsoft-jdk-${JAVA_VERSION}-linux-x64.tar.gz && \
+    mkdir -p /usr/lib/jvm && \
+    tar xvzf microsoft-jdk-${JAVA_VERSION}-linux-x64.tar.gz -C /usr/lib/jvm &&\
+    rm -f microsoft-jdk-${JAVA_VERSION}-linux-x64.tar.gz && \
     wget https://functionscdn.azureedge.net/public/ExtensionBundles/Microsoft.Azure.Functions.ExtensionBundle/$EXTENSION_BUNDLE_VERSION/$EXTENSION_BUNDLE_FILENAME && \
     mkdir -p /FuncExtensionBundles/Microsoft.Azure.Functions.ExtensionBundle/$EXTENSION_BUNDLE_VERSION && \
     unzip /$EXTENSION_BUNDLE_FILENAME -d /FuncExtensionBundles/Microsoft.Azure.Functions.ExtensionBundle/$EXTENSION_BUNDLE_VERSION && \
@@ -42,7 +46,6 @@ RUN EXTENSION_BUNDLE_VERSION=1.8.1 && \
     rm -f /$EXTENSION_BUNDLE_FILENAME_V3 &&\
     find /FuncExtensionBundles/ -type f -exec chmod 644 {} \;
 
-FROM mcr.microsoft.com/java/jre-headless:${JAVA_VERSION}-zulu-debian10-with-tools as jre
 FROM mcr.microsoft.com/dotnet/runtime-deps:6.0.0-rc.2
 ARG HOST_VERSION
 
@@ -60,12 +63,12 @@ RUN apt-get update && \
 
 COPY --from=runtime-image [ "/azure-functions-host", "/azure-functions-host" ]
 COPY --from=runtime-image [ "/workers/java", "/azure-functions-host/workers/java" ]
-COPY --from=jre [ "/usr/lib/jvm/zre-hl-tools-11-azure-amd64", "/usr/lib/jvm/zre-11-azure-amd64" ]
+COPY --from=runtime-image [ "/usr/lib/jvm/jdk-11.0.12+7", "/usr/lib/jvm/microsoft-jdk-11.0.12.7.1" ]
 COPY sshd_config /etc/ssh/
 COPY start.sh /azure-functions-host/
 COPY --from=runtime-image [ "/FuncExtensionBundles", "/FuncExtensionBundles" ]
 
-ENV JAVA_HOME /usr/lib/jvm/zre-11-azure-amd64
+ENV JAVA_HOME /usr/lib/jvm/microsoft-jdk-11.0.12.7.1
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends openssh-server dialog && \
